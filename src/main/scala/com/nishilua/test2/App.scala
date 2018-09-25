@@ -2,7 +2,7 @@ package com.nishilua.test2
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import scalaz._
 import Scalaz._
 import org.apache.spark.sql.functions._
@@ -94,7 +94,7 @@ object App {
       .drop(tagIdProductName("tag_id"))
 
     // Regroup all
-    val tupledExplodedResult = explodedResult.withColumn("recommended", TupleUdfs.toTuple2[String,String].apply(explodedResult("recommended_tag_id"),explodedResult("recommended_tag_id")))
+    val tupledExplodedResult = explodedResult.withColumn("recommended", TupleUdfs.toTuple2[String,String].apply(explodedResult("recommended_tag_id"),explodedResult("recommended_product_name")))
         .drop(explodedResult("recommended_tag_id"))
         .drop(explodedResult("recommended_product_name"))
     val recommendationResult = tupledExplodedResult.groupBy($"tag_id", $"product_name").agg(collect_list("recommended") as "recommendations").cache()
@@ -103,8 +103,22 @@ object App {
     //       and sending the name back and forth instead the last 2 joins. There is quite some probabilities that
     //       will be faster
 
-    recommendationResult.show(2)
+    val searchProduct = recommendationResult.filter("tag_id == 'ff0d3fb21c00bc33f71187a2beec389e9eff5332'").collect()
+
+    searchProduct.foreach(printProduct(_))
 
   }
+
+  private def printProduct(resultRow: Row) = {
+    val productName = resultRow.getAs[String]("product_name")
+    val tagId = resultRow.getAs[String]("tag_id")
+    println(s"$productName ($tagId)")
+    resultRow.getAs[Seq[Row]]("recommendations").foreach( recommendation => {
+      val productName = recommendation.getAs[String](1)
+      val tagId = recommendation.getAs[String](0)
+      println(s"    $productName ($tagId)")
+    })
+  }
+
 
 }
