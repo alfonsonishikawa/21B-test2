@@ -81,7 +81,8 @@ object App {
 
     //productTop10.take(10).foreach(println)
 
-    // Now, there is the need to join with the product names
+    // Now, there is the need to join with the product names.
+    // Sadly, we have to explode the grouping, add the name for each recommended product and regroup again the recommendations for each product
 
     val explodedValues = productTop10.flatMap { case (tag_id, viewsCount) => for (view <- viewsCount) yield (tag_id, view._1) }
     val explodedValuesDS = explodedValues.toDF("tag_id", "recommended_tag_id").as[TagSingleRecom]
@@ -89,14 +90,14 @@ object App {
       .drop(tagIdProductName("tag_id"))
       .withColumnRenamed("product_name", "recommended_product_name")
 
-      //Add the product name (not only names for recommendations)
+      //Add the key product name (not only names for recommendations)
     val explodedResult = joinedRecommendedNames.join(tagIdProductName, explodedValuesDS("tag_id") === tagIdProductName("tag_id"))
       .drop(tagIdProductName("tag_id"))
 
+    // Regroup all
     val tupledExplodedResult = explodedResult.withColumn("recommended", TupleUdfs.toTuple2[String,String].apply(explodedResult("recommended_tag_id"),explodedResult("recommended_tag_id")))
         .drop(explodedResult("recommended_tag_id"))
         .drop(explodedResult("recommended_product_name"))
-
     val recommendationResult = tupledExplodedResult.groupBy($"tag_id", $"product_name").agg(collect_list("recommended") as "recommendations").cache()
 
     recommendationResult.show(2)
