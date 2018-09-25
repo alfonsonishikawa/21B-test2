@@ -47,8 +47,6 @@ object App {
     val userSingleView: RDD[(UserId, TagId)] = viewsRDD.map( view => (view.user_id, view.tag_id))
 
     // Create (user, views set)
-    // TODO: aggregateByKey is not a tree aggregation (or is it in last spark versions?), so the driver may have
-    //       some heavy work. If there are problems, change to use treeaggreate
     val userViews = userSingleView.aggregateByKey (Set[TagId]()) (
       { case (buf, tag) => buf + tag },
       { case (buf1, buf2) => buf1 ++ buf2 }
