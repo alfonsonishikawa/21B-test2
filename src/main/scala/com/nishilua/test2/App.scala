@@ -100,6 +100,10 @@ object App {
         .drop(explodedResult("recommended_product_name"))
     val recommendationResult = tupledExplodedResult.groupBy($"tag_id", $"product_name").agg(collect_list("recommended") as "recommendations").cache()
 
+    // TODO: Test if the processing of the recommended_tag_ids to get the top 10 would be faster grouping it with its product_name
+    //       and sending the name back and forth instead the last 2 joins. There is quite some probabilities that
+    //       will be faster
+
     recommendationResult.show(2)
 
   }
