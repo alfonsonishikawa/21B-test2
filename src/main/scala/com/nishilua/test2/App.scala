@@ -6,6 +6,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.Aggregator
 import scalaz._
 import Scalaz._
+import org.apache.spark.sql.functions._
 
 /**
  * @author ${user.name}
@@ -23,6 +24,8 @@ object App {
   val RELATED_COUNT = 10
 
   case class View(id: Int, user_id:String, tag_id:String, product_name:String)
+  case class TagName(tag_id: String, product_name:String)
+  case class TagSingleRecom(tag_id: TagId, recommended_tag_id: TagId)
 
   def main(args : Array[String]) {
 
@@ -37,7 +40,7 @@ object App {
     // RDD
 
     // (tag_id, product_name) to be used as lookup name table at the end
-    val tagIdProductName = viewsDS.select($"tag_id", $"product_name").distinct()
+    val tagIdProductName = viewsDS.select($"tag_id", $"product_name").as[TagName].distinct().cache()
 
     val viewsRDD = viewsDS.rdd
 
@@ -76,10 +79,27 @@ object App {
 
     // At this point we have all the raw data: tag_id => top recommended views
 
-    // Now, there is the need to join with the produt names
+    //productTop10.take(10).foreach(println)
 
-    productTop10.toDebugString
-    productTop10.take(10).foreach(println)
+    // Now, there is the need to join with the product names
+
+    val explodedValues = productTop10.flatMap { case (tag_id, viewsCount) => for (view <- viewsCount) yield (tag_id, view._1) }
+    val explodedValuesDS = explodedValues.toDF("tag_id", "recommended_tag_id").as[TagSingleRecom]
+    val joinedRecommendedNames = explodedValuesDS.join(tagIdProductName, explodedValuesDS("recommended_tag_id") === tagIdProductName("tag_id"))
+      .drop(tagIdProductName("tag_id"))
+      .withColumnRenamed("product_name", "recommended_product_name")
+
+      //Add the product name (not only names for recommendations)
+    val explodedResult = joinedRecommendedNames.join(tagIdProductName, explodedValuesDS("tag_id") === tagIdProductName("tag_id"))
+      .drop(tagIdProductName("tag_id"))
+
+    val tupledExplodedResult = explodedResult.withColumn("recommended", TupleUdfs.toTuple2[String,String].apply(explodedResult("recommended_tag_id"),explodedResult("recommended_tag_id")))
+        .drop(explodedResult("recommended_tag_id"))
+        .drop(explodedResult("recommended_product_name"))
+
+    val recommendationResult = tupledExplodedResult.groupBy($"tag_id", $"product_name").agg(collect_list("recommended") as "recommendations").cache()
+
+    recommendationResult.show(2)
 
   }
 
